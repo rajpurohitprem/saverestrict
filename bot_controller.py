@@ -1,8 +1,7 @@
 import json
 import asyncio
 from telethon import TelegramClient, events, Button
-from save_restrictor import fetch_and_forward, CONFIG, save_config, get_channel_list, get_entity_by_id
-
+from save_restrictor import fetch_and_forward, CONFIG, load_config, get_channel_list, get_entity_by_id
 API_ID = CONFIG["api_id"]
 API_HASH = CONFIG["api_hash"]
 BOT_TOKEN = CONFIG["bot_token"]
