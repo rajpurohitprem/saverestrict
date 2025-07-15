@@ -1,183 +1,105 @@
-from telethon import TelegramClient, events, Button
-import json
-import asyncio
-from save_restrictor import fetch_and_forward
+from telethon.sync import TelegramClient
+from telethon.tl.types import DocumentAttributeFilename
+from telethon import events
 from config import CONFIG, save_config
+from save_restrictor import fetch_and_forward
+import asyncio
 
-# Load values
 api_id = CONFIG["api_id"]
 api_hash = CONFIG["api_hash"]
-bot_token = CONFIG["bot_token"]
-admin_id = CONFIG["admin_id"]
 phone = CONFIG["phone_number"]
 
-# Clients
 client = TelegramClient("anon", api_id, api_hash)
-bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)
 
-# Allowed users
-allowed_users = CONFIG.get("allowed_users", [])
-if admin_id not in allowed_users:
-    allowed_users.append(admin_id)
-
-running = False
-
-# ──────────────── Commands ──────────────── #
-
-@bot.on(events.NewMessage(pattern="/start"))
+@client.on(events.NewMessage(pattern="/start"))
 async def start(event):
-    if event.sender_id != admin_id:
-        return
-    await event.respond("🤖 **Save Restrict Bot is Ready**\n\nUse /help to see commands.")
-@bot.on(events.NewMessage(pattern="/setlogchannel"))
-async def set_log_channel(event):
     if event.sender_id != CONFIG["admin_id"]:
-        return await event.reply("⛔ You are not allowed to do this.")
+        return await event.reply("⛔ Access Denied.")
+
+    await event.reply(
+        "**Save Restrict Bot** is online.\n\n"
+        "Available commands:\n"
+        "`/save <msg_id>` – Save message from source channel\n"
+        "`/setsourcechannel` – Choose source channel\n"
+        "`/setlogchannel` – Choose log channel\n"
+        "`/help` – Show this help"
+    )
+
+@client.on(events.NewMessage(pattern="/help"))
+async def help_cmd(event):
+    await start(event)
+
+@client.on(events.NewMessage(pattern="/save (\d+)"))
+async def save(event):
+    if event.sender_id != CONFIG["admin_id"]:
+        return await event.reply("⛔ Access Denied.")
+
+    msg_id = int(event.pattern_match.group(1))
+    try:
+        result = await fetch_and_forward(msg_id, client)
+        await event.reply(result)
+    except Exception as e:
+        await event.reply(f"❌ Error:\n`{e}`")
+
+@client.on(events.NewMessage(pattern="/setsourcechannel"))
+async def set_source(event):
+    if event.sender_id != CONFIG["admin_id"]:
+        return await event.reply("⛔ Access Denied.")
 
     dialogs = await client.get_dialogs()
     channels = [d for d in dialogs if d.is_channel]
 
     if not channels:
-        return await event.reply("❌ No channels found. Make sure your user is a member of at least one channel.")
+        return await event.reply("No channels found.")
 
-    msg = "📢 **Your Channels:**\n"
-    for i, ch in enumerate(channels, start=1):
+    msg = "**📡 Your Channels:**\n"
+    for i, ch in enumerate(channels, 1):
         msg += f"{i}. {ch.name} — `{ch.id}`\n"
-    msg += "\nReply with the number of the channel you want to set as `log_channel`."
+    msg += "\nReply with the number of the channel to set as `source_channel`"
 
     await event.reply(msg)
-
-    # Wait for reply from the same user
-    response = await bot.wait_for(events.NewMessage(from_users=event.sender_id))
+    reply = await client.wait_for(events.NewMessage(from_users=event.sender_id))
 
     try:
-        choice = int(response.raw_text.strip())
-        chosen = channels[choice - 1]
-    except (ValueError, IndexError):
-        return await response.reply("❌ Invalid choice. Try again.")
+        index = int(reply.raw_text.strip()) - 1
+        chosen = channels[index]
+    except:
+        return await reply.reply("❌ Invalid choice.")
+
+    CONFIG["source_channel"] = chosen.id
+    save_config(CONFIG)
+    await reply.reply(f"✅ Source channel set to **{chosen.name}** (`{chosen.id}`)")
+
+@client.on(events.NewMessage(pattern="/setlogchannel"))
+async def set_log(event):
+    if event.sender_id != CONFIG["admin_id"]:
+        return await event.reply("⛔ Access Denied.")
+
+    dialogs = await client.get_dialogs()
+    channels = [d for d in dialogs if d.is_channel]
+
+    if not channels:
+        return await event.reply("No channels found.")
+
+    msg = "**📤 Your Channels:**\n"
+    for i, ch in enumerate(channels, 1):
+        msg += f"{i}. {ch.name} — `{ch.id}`\n"
+    msg += "\nReply with the number of the channel to set as `log_channel`"
+
+    await event.reply(msg)
+    reply = await client.wait_for(events.NewMessage(from_users=event.sender_id))
+
+    try:
+        index = int(reply.raw_text.strip()) - 1
+        chosen = channels[index]
+    except:
+        return await reply.reply("❌ Invalid choice.")
 
     CONFIG["log_channel"] = chosen.id
     save_config(CONFIG)
-    await response.reply(f"✅ `log_channel` set to **{chosen.name}** (`{chosen.id}`)")
+    await reply.reply(f"✅ Log channel set to **{chosen.name}** (`{chosen.id}`)")
 
-@bot.on(events.NewMessage(pattern="/help"))
-async def help_cmd(event):
-    if event.sender_id != admin_id:
-        return
-    await event.respond(
-        "**🛠 Commands:**\n"
-        "/save <msg_id> - Save message from source\n"
-        "/set_source - Choose source channel\n"
-        "/set_log - Choose log (target) channel\n"
-        "/log_toggle - Toggle log ON/OFF\n"
-        "/restrict <user_id> - Ban user\n"
-        "/allow <user_id> - Allow user\n"
-        "/stop - Stop running operation"
-    )
-
-@bot.on(events.NewMessage(pattern="/save (\d+)"))
-async def save(event):
-    if event.sender_id not in allowed_users:
-        return
-
-    global running
-    if running:
-        await event.respond("⚠️ Already running. Use /stop to cancel.")
-        return
-
-    running = True
-    msg_id = event.pattern_match.group(1)
-    await event.respond("⏳ Fetching message...")
-
-    result = await fetch_and_forward(msg_id, bot)
-    await event.respond(result)
-
-    running = False
-
-@bot.on(events.NewMessage(pattern="/stop"))
-async def stop(event):
-    global running
-    if event.sender_id != admin_id:
-        return
-    running = False
-    await event.respond("⛔ Operation stopped.")
-
-@bot.on(events.NewMessage(pattern="/log_toggle"))
-async def toggle_log(event):
-    if event.sender_id != admin_id:
-        return
-    CONFIG["logging_enabled"] = not CONFIG.get("logging_enabled", False)
-    save_config(CONFIG)
-    status = "ON ✅" if CONFIG["logging_enabled"] else "OFF ❌"
-    await event.respond(f"🗂 Logging turned {status}")
-
-@bot.on(events.NewMessage(pattern="/restrict (\d+)"))
-async def restrict(event):
-    if event.sender_id != admin_id:
-        return
-    uid = int(event.pattern_match.group(1))
-    if uid in allowed_users:
-        allowed_users.remove(uid)
-    CONFIG["allowed_users"] = allowed_users
-    save_config(CONFIG)
-    await event.respond(f"🚫 User {uid} restricted.")
-
-@bot.on(events.NewMessage(pattern="/allow (\d+)"))
-async def allow(event):
-    if event.sender_id != admin_id:
-        return
-    uid = int(event.pattern_match.group(1))
-    if uid not in allowed_users:
-        allowed_users.append(uid)
-    CONFIG["allowed_users"] = allowed_users
-    save_config(CONFIG)
-    await event.respond(f"✅ User {uid} allowed.")
-
-# ──────────────── Set Channels ──────────────── #
-
-@bot.on(events.NewMessage(pattern="/set_source"))
-async def set_source(event):
-    if event.sender_id != admin_id:
-        return
-
-    await client.start(phone=phone)
-    dialogs = await client.get_dialogs()
-    channels = [d for d in dialogs if d.is_channel]
-
-    buttons = [Button.inline(c.name[:30], data=f"setsrc:{c.entity.id}") for c in channels]
-    chunks = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
-    await event.respond("📡 **Choose Source Channel**:", buttons=chunks)
-    await client.disconnect()
-
-@bot.on(events.NewMessage(pattern="/set_log"))
-async def set_log(event):
-    if event.sender_id != admin_id:
-        return
-
-    await client.start(phone=phone)
-    dialogs = await client.get_dialogs()
-    channels = [d for d in dialogs if d.is_channel]
-
-    buttons = [Button.inline(c.name[:30], data=f"setlog:{c.entity.id}") for c in channels]
-    chunks = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
-    await event.respond("📤 **Choose Log Channel**:", buttons=chunks)
-    await client.disconnect()
-
-@bot.on(events.CallbackQuery(pattern=b"setsrc:(-?\d+)"))
-async def cb_setsrc(event):
-    cid = int(event.pattern_match.group(1))
-    CONFIG["source_channel"] = cid
-    save_config(CONFIG)
-    await event.edit(f"✅ Source channel set to `{cid}`")
-
-@bot.on(events.CallbackQuery(pattern=b"setlog:(-?\d+)"))
-async def cb_setlog(event):
-    cid = int(event.pattern_match.group(1))
-    CONFIG["log_channel"] = cid
-    save_config(CONFIG)
-    await event.edit(f"✅ Log (target) channel set to `{cid}`")
-
-# ──────────────── Start Bot ──────────────── #
-
+# Start bot
 print("🤖 Bot is running...")
-bot.run_until_disconnected()
+client.start(phone)
+client.run_until_disconnected()
