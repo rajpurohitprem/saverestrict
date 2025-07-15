@@ -1,121 +1,26 @@
-import json
-import asyncio
-from telethon import TelegramClient, events, Button
-from save_restrictor import fetch_and_forward, CONFIG, load_config, get_channel_list, get_entity_by_id
-API_ID = CONFIG["api_id"]
-API_HASH = CONFIG["api_hash"]
-BOT_TOKEN = CONFIG["bot_token"]
-OWNER_ID = CONFIG["admin_id"]
+import asyncio import json import os from telethon import TelegramClient, events from telethon.tl.types import PeerChannel from save_restrictor import ( fetch_and_forward, CONFIG, load_config, save_config, get_channel_list, get_entity_by_id )
 
-bot = TelegramClient("bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
-user_client = TelegramClient("anon", API_ID, API_HASH)
+Load config
 
-# Ensure user client is running
-async def start_user_client():
-    await user_client.start(phone=CONFIG["phone_number"])
-asyncio.get_event_loop().run_until_complete(start_user_client())
+load_config()
 
-async def is_admin(event):
-    return event.sender_id == OWNER_ID
+bot = TelegramClient('bot', CONFIG['api_id'], CONFIG['api_hash']).start(bot_token=CONFIG['bot_token']) user_client = TelegramClient('anon', CONFIG['api_id'], CONFIG['api_hash'])
 
-@bot.on(events.NewMessage(pattern="/start"))
-async def start(event):
-    if not await is_admin(event): return
-    await event.respond(
-        "👋 Welcome to Save Restrict Bot!",
-        buttons=[
-            [Button.text("Set Source Channel"), Button.text("Set Target Channel")],
-            [Button.text("Set Log Channel"), Button.text("Toggle Logging")],
-            [Button.text("Help")]
-        ],
-        reply_to=event.id
-    )
+async def start_user_client(): await user_client.start(phone=CONFIG['phone'])
 
-@bot.on(events.NewMessage(pattern="/help"))
-async def help_cmd(event):
-    if not await is_admin(event): return
-    msg = (
-        "📖 *Available Commands*:\n"
-        "/save `<msg_id>` or `<start_id-end_id>` - Save restricted messages\n"
-        "/set_source - Set source channel\n"
-        "/set_target - Set target channel\n"
-        "/set_log - Set log channel\n"
-        "/log_toggle - Toggle logging\n"
-        "/stop - Cancel any running save process"
-    )
-    await event.respond(msg, parse_mode="md", reply_to=event.id)
+@bot.on(events.NewMessage(pattern='/start')) async def start(event): if event.sender_id != CONFIG['admin_id']: return await event.reply("✅ Bot is running!\nCommands:\n/set_source <id>\n/set_target <id>\n/set_log <id>\n/log_toggle\n/save <start_id>-<end_id>")
 
-@bot.on(events.NewMessage(pattern=r"/save (\d+)(-(\d+))?"))
-async def save(event):
-    if not await is_admin(event): return
-    match = event.pattern_match
-    start_id = int(match.group(1))
-    end_id = int(match.group(3)) if match.group(3) else start_id
-    await event.respond(f"🔄 Saving messages from {start_id} to {end_id}...", reply_to=event.id)
+@bot.on(events.NewMessage(pattern='/set_source')) async def set_source(event): if event.sender_id != CONFIG['admin_id']: return try: parts = event.raw_text.split() if len(parts) == 2: channel_id = int(parts[1]) entity = await get_entity_by_id(user_client, channel_id) if entity: CONFIG['source_channel'] = channel_id save_config() await event.reply("✅ Source channel set.") else: await event.reply("❌ Could not find source channel.") else: await event.reply("❌ Usage: /set_source <channel_id>") except Exception as e: await event.reply(f"❌ Error: {e}")
 
-    for msg_id in range(start_id, end_id + 1):
-        try:
-            result = await fetch_and_forward(msg_id, user_client)
-            await event.respond(f"✅ Saved message {msg_id}", reply_to=event.id)
-        except Exception as e:
-            await event.respond(f"❌ Error on {msg_id}: {e}", reply_to=event.id)
+@bot.on(events.NewMessage(pattern='/set_target')) async def set_target(event): if event.sender_id != CONFIG['admin_id']: return try: parts = event.raw_text.split() if len(parts) == 2: channel_id = int(parts[1]) entity = await get_entity_by_id(user_client, channel_id) if entity: CONFIG['target_channel'] = channel_id save_config() await event.reply("✅ Target channel set.") else: await event.reply("❌ Could not find target channel.") else: await event.reply("❌ Usage: /set_target <channel_id>") except Exception as e: await event.reply(f"❌ Error: {e}")
 
-@bot.on(events.NewMessage(pattern="/log_toggle"))
-async def log_toggle(event):
-    if not await is_admin(event): return
-    CONFIG["log_enabled"] = not CONFIG.get("log_enabled", False)
-    save_config()
-    state = "ON" if CONFIG["log_enabled"] else "OFF"
-    await event.respond(f"📝 Log channel toggled {state}", reply_to=event.id)
+@bot.on(events.NewMessage(pattern='/set_log')) async def set_log(event): if event.sender_id != CONFIG['admin_id']: return try: parts = event.raw_text.split() if len(parts) == 2: channel_id = int(parts[1]) entity = await get_entity_by_id(user_client, channel_id) if entity: CONFIG['log_channel'] = channel_id save_config() await event.reply("✅ Log channel set.") else: await event.reply("❌ Could not find log channel.") else: await event.reply("❌ Usage: /set_log <channel_id>") except Exception as e: await event.reply(f"❌ Error: {e}")
 
-@bot.on(events.NewMessage(pattern="/stop"))
-async def stop(event):
-    if not await is_admin(event): return
-    # Optional: implement shared state cancel logic
-    await event.respond("⛔ Cancel not yet implemented", reply_to=event.id)
+@bot.on(events.NewMessage(pattern='/log_toggle')) async def toggle_log(event): if event.sender_id != CONFIG['admin_id']: return CONFIG['log_enabled'] = not CONFIG.get('log_enabled', False) save_config() await event.reply(f"📝 Logging is now {'enabled' if CONFIG['log_enabled'] else 'disabled'}.")
 
-# Channel selectors
-@bot.on(events.NewMessage(pattern="/set_source"))
-async def set_source(event):
-    if not await is_admin(event): return
-    channels = await get_channel_list(user_client)
-    btns = [Button.inline(c.title, data=f"src_{c.id}") for c in channels]
-    await event.respond("📥 Choose source channel:", buttons=btns, reply_to=event.id)
+@bot.on(events.NewMessage(pattern='/save')) async def save(event): if event.sender_id != CONFIG['admin_id']: return try: parts = event.raw_text.split() if len(parts) == 2 and '-' in parts[1]: start_id, end_id = map(int, parts[1].split('-')) result = await fetch_and_forward(start_id, end_id, bot) await event.reply(f"✅ Done. {result} messages sent.") else: await event.reply("❌ Usage: /save <start_id>-<end_id>") except Exception as e: await event.reply(f"❌ Error: {e}")
 
-@bot.on(events.NewMessage(pattern="/set_target"))
-async def set_target(event):
-    if not await is_admin(event): return
-    channels = await get_channel_list(user_client)
-    btns = [Button.inline(c.title, data=f"tgt_{c.id}") for c in channels]
-    await event.respond("📤 Choose target channel:", buttons=btns, reply_to=event.id)
+async def main(): await start_user_client() print("✅ User client started.") await bot.run_until_disconnected()
 
-@bot.on(events.NewMessage(pattern="/set_log"))
-async def set_log(event):
-    if not await is_admin(event): return
-    channels = await get_channel_list(user_client)
-    btns = [Button.inline(c.title, data=f"log_{c.id}") for c in channels]
-    await event.respond("📝 Choose log channel:", buttons=btns, reply_to=event.id)
+if name == 'main': asyncio.get_event_loop().run_until_complete(main())
 
-# Handle inline callback buttons
-@bot.on(events.CallbackQuery())
-async def callback_handler(event):
-    if not await is_admin(event): return
-    data = event.data.decode()
-    if data.startswith("src_"):
-        cid = int(data.split("_")[1])
-        CONFIG["source_channel"] = cid
-        save_config()
-        await event.edit(f"✅ Source channel set to ID: {cid}")
-    elif data.startswith("tgt_"):
-        cid = int(data.split("_")[1])
-        CONFIG["target_channel"] = cid
-        save_config()
-        await event.edit(f"✅ Target channel set to ID: {cid}")
-    elif data.startswith("log_"):
-        cid = int(data.split("_")[1])
-        CONFIG["log_channel"] = cid
-        save_config()
-        await event.edit(f"✅ Log channel set to ID: {cid}")
-
-print("🤖 Bot is running...")
-bot.run_until_disconnected()
