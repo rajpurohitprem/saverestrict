@@ -1,3 +1,4 @@
 telethon
 aiogram
 tqdm
+pydantic==1.10.13
