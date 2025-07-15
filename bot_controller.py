@@ -96,8 +96,10 @@ async def save(event):
         return await event.reply("❌ Unauthorized.")
     msg_id = int(event.pattern_match.group(1))
     await event.reply("⏳ Saving message...")
+    await event.reply("⏳ Saving message...")
     result = await fetch_and_forward(msg_id)
-    await event.reply(result or "✅ Done")
+    await event.respond(result or "✅ Done")  # respond = reply using bot
+
 
 # Run the bot
 print("🤖 Bot running...")
