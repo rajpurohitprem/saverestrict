@@ -1,3 +1,3 @@
-telethon
+telethon==1.33.0
 tqdm
-Telethon
+python-telegram-bot==20.6
