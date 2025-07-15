@@ -1,32 +1,20 @@
-from telethon.sync import TelegramClient
+# save_restrictor.py
+from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 from telethon.tl.functions.messages import GetMessagesRequest
-from telethon.tl.types import InputPeerChannel, InputMessageID
-from telethon.tl.functions.channels import GetFullChannelRequest
-from tqdm import tqdm
-import json
+from config import CONFIG
 import os
 
-CONFIG = json.load(open("config.json"))
-SESSION = "anon"
+async def fetch_and_forward(msg_id, client):
+    source = CONFIG["source_channel"]
+    target = CONFIG["log_channel"]
 
-client = TelegramClient(SESSION, CONFIG["api_id"], CONFIG["api_hash"])
+    msg = (await client(GetMessagesRequest(id=[int(msg_id)], peer=source))).messages[0]
 
-async def fetch_and_forward(msg_id, bot):
-    await client.start(phone=CONFIG["phone_number"])
+    if msg.media:
+        file = await client.download_media(msg, file="downloads/")
+        await client.send_file(target, file, caption=msg.text or "")
+        os.remove(file)
+    else:
+        await client.send_message(target, msg.text or "[Empty Message]")
 
-    source = await client.get_entity(CONFIG["source_channel"])
-    log_channel = await bot.get_entity(CONFIG["log_channel"])
-
-    try:
-        msg = await client(GetMessagesRequest(id=[int(msg_id)]))
-        if msg.messages:
-            m = msg.messages[0]
-            progress = tqdm(total=1, desc="Downloading...", unit="msg")
-            await bot.send_message(log_channel, m)
-            progress.update(1)
-            progress.close()
-            return "✅ Message saved."
-        else:
-            return "⚠️ Message not found."
-    except Exception as e:
-        return f"❌ Error: {e}"
+    return "✅ Message saved."
