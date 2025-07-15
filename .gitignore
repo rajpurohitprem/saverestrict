@@ -1,1 +1,8 @@
+anon.session
+*.pyc
+__pycache__/
+*.log
+sent_ids.txt
+errors.txt
 config.json
+downloads/
