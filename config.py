@@ -1,13 +1,10 @@
 import json
+import os
 
-CONFIG_FILE = "config.json"
+CONFIG_PATH = "config.json"
 
-def load_config():
-    with open(CONFIG_FILE) as f:
-        return json.load(f)
+if not os.path.exists(CONFIG_PATH):
+    raise FileNotFoundError("config.json not found. Run setup_config.py first.")
 
-def save_config(data):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-CONFIG = load_config()
+with open(CONFIG_PATH, "r") as f:
+    CONFIG = json.load(f)
