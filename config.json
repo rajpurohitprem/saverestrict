@@ -1,9 +1,11 @@
 {
   "api_id": 123456,
-  "api_hash": "your_api_hash_here",
-  "phone_number": "+911234567890",
-  "bot_token": "not_used_here",
+  "api_hash": "your_api_hash",
+  "bot_token": "your_bot_token",
+  "phone": "+911234567890",
   "admin_id": 123456789,
-  "source_channel": -1001234567890,
-  "log_channel": -1009876543210
+  "source_channel_id": -1001234567890,
+  "target_channel_id": -1009876543210,
+  "log_channel_id": -1001122334455,
+  "logging_enabled": true
 }
