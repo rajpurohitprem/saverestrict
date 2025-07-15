@@ -1,40 +1,32 @@
 from telethon.sync import TelegramClient
 from telethon.tl.functions.messages import GetMessagesRequest
-from telethon.tl.types import InputPeerChannel, PeerChannel
-from telethon.errors import MessageIdInvalidError
+from telethon.tl.types import InputPeerChannel, InputMessageID
+from telethon.tl.functions.channels import GetFullChannelRequest
 from tqdm import tqdm
-import os
 import json
-import logging
+import os
 
 CONFIG = json.load(open("config.json"))
-client = TelegramClient("anon", CONFIG["api_id"], CONFIG["api_hash"])
+SESSION = "anon"
 
-if not os.path.exists("log.txt"):
-    open("log.txt", "w").close()
+client = TelegramClient(SESSION, CONFIG["api_id"], CONFIG["api_hash"])
 
-logging.basicConfig(filename='log.txt', level=logging.INFO)
-
-async def save_message(msg_id):
+async def fetch_and_forward(msg_id, bot):
     await client.start(phone=CONFIG["phone_number"])
+
+    source = await client.get_entity(CONFIG["source_channel"])
+    log_channel = await bot.get_entity(CONFIG["log_channel"])
+
     try:
-        entity = await client.get_entity(CONFIG["source_channel"])
-        messages = await client(GetMessagesRequest(id=[int(msg_id)]))
-        msg = messages.messages[0]
-
-        media = msg.media
-        if media:
-            filename = await client.download_media(media, progress_callback=lambda d, t: tqdm(total=t).update(d))
-            logging.info(f"Downloaded media from msg_id {msg_id} to {filename}")
+        msg = await client(GetMessagesRequest(id=[int(msg_id)]))
+        if msg.messages:
+            m = msg.messages[0]
+            progress = tqdm(total=1, desc="Downloading...", unit="msg")
+            await bot.send_message(log_channel, m)
+            progress.update(1)
+            progress.close()
+            return "✅ Message saved."
         else:
-            filename = None
-            logging.info(f"No media found in msg_id {msg_id}")
-
-        if CONFIG.get("log_channel"):
-            await client.send_message(CONFIG["log_channel"], msg.text or "Media saved.", file=filename)
-        return "✅ Message saved."
-    except MessageIdInvalidError:
-        return "❌ Invalid Message ID."
+            return "⚠️ Message not found."
     except Exception as e:
-        logging.error(f"Error saving msg {msg_id}: {str(e)}")
-        return f"❌ Error: {str(e)}"
+        return f"❌ Error: {e}"
