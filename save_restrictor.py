@@ -104,3 +104,9 @@ if __name__ == '__main__':
 
     asyncio.get_event_loop().run_until_complete(client.connect())
     app.run_polling()
+
+
+async def get_channel_list():
+    client = await get_client()
+    dialogs = await client.get_dialogs()
+    return [d for d in dialogs if d.is_channel and not d.is_user]
