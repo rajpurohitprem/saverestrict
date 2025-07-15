@@ -29,6 +29,36 @@ async def start(event):
     if event.sender_id != admin_id:
         return
     await event.respond("🤖 **Save Restrict Bot is Ready**\n\nUse /help to see commands.")
+@bot.on(events.NewMessage(pattern="/setlogchannel"))
+async def set_log_channel(event):
+    if event.sender_id != CONFIG["admin_id"]:
+        return await event.reply("⛔ You are not allowed to do this.")
+
+    dialogs = await client.get_dialogs()
+    channels = [d for d in dialogs if d.is_channel]
+
+    if not channels:
+        return await event.reply("❌ No channels found. Make sure your user is a member of at least one channel.")
+
+    msg = "📢 **Your Channels:**\n"
+    for i, ch in enumerate(channels, start=1):
+        msg += f"{i}. {ch.name} — `{ch.id}`\n"
+    msg += "\nReply with the number of the channel you want to set as `log_channel`."
+
+    await event.reply(msg)
+
+    # Wait for reply from the same user
+    response = await bot.wait_for(events.NewMessage(from_users=event.sender_id))
+
+    try:
+        choice = int(response.raw_text.strip())
+        chosen = channels[choice - 1]
+    except (ValueError, IndexError):
+        return await response.reply("❌ Invalid choice. Try again.")
+
+    CONFIG["log_channel"] = chosen.id
+    save_config(CONFIG)
+    await response.reply(f"✅ `log_channel` set to **{chosen.name}** (`{chosen.id}`)")
 
 @bot.on(events.NewMessage(pattern="/help"))
 async def help_cmd(event):
