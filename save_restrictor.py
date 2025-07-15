@@ -110,3 +110,9 @@ async def get_channel_list():
     client = await get_client()
     dialogs = await client.get_dialogs()
     return [d for d in dialogs if d.is_channel and not d.is_user]
+async def get_entity_by_id(client, channel_id):
+    try:
+        return await client.get_entity(channel_id)
+    except Exception as e:
+        print(f"Failed to fetch entity for ID {channel_id}: {e}")
+        return None
