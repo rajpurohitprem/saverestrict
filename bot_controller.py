@@ -12,7 +12,7 @@ user_client = TelegramClient("anon", API_ID, API_HASH)
 
 # Ensure user client is running
 async def start_user_client():
-    await user_client.start(phone=CONFIG["phone"])
+    await user_client.start(phone=CONFIG["phone_number"])
 asyncio.get_event_loop().run_until_complete(start_user_client())
 
 async def is_admin(event):
