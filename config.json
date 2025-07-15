@@ -1,0 +1,10 @@
+{
+  "api_id": 123456,
+  "api_hash": "your_api_hash",
+  "bot_token": "your_bot_token",
+  "phone_number": "+1234567890",
+  "source_channel": "source_channel_username_or_id",
+  "log_channel": "your_log_channel_id_or_username (optional)",
+  "admin_user_id": 123456789,
+  "log_enabled": true
+}
